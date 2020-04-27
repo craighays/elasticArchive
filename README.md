@@ -21,7 +21,7 @@ This app:
 If you want, you can create .mitmproxy/config.yaml and add your own settings. I find using the start script
 to work well enough for me.
 
-cat > .mitmproxy/config.yaml <<EOF
+      cat > .mitmproxy/config.yaml <<EOF
       elasticsearch_URL: "http://link.to.your.server:9200/mitmproxy/_doc
       encodecontent: true
 
