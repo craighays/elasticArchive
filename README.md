@@ -8,6 +8,10 @@ the fly as well as analyse it at a later date.
 My setup for this is:
 Browser -> Burp Suite -> mitmdump elasticArchive -> web
 
+Based on:
+- https://github.com/mitmproxy/mitmproxy/blob/master/examples/complex/har_dump.py
+- https://github.com/mitmproxy/mitmproxy/blob/11da2f799c1189ea2a6c687ce55d23a28ab29236/examples/complex/jsondump.py
+
 # How it works
 This app: 
 - runs docker
