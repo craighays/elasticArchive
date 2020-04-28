@@ -40,3 +40,8 @@ text/yaml
 
 # startswith("multipart/form-data")
 multipart/form-data
+
+# startswith("application/json")
+application/json
+# startswith("application/xml")
+application/xml

@@ -237,6 +237,10 @@ class elasticArchive:
                 return False
             elif contentType.startswith("multipart/form-data"):
                 return False
+            elif contentType.startswith("application/json"):
+                return False
+            elif contentType.startswith("application/xml"):
+                return  False
             else:
                 return True
 
