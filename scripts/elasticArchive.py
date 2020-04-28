@@ -174,16 +174,16 @@ class elasticArchive:
         for header in frame["request"]["headers"]:
             h = header[0].decode('utf-8') 
             #print(h)
-            if h == "content-type":
+            if h.lower() == "content-type":
                 requestContentType = header[1].decode("utf-8")
-            if h == "content-encoding":
+            if h.lower() == "content-encoding":
                 requestContentEncoding = header[1].decode("utf-8")
         for header in frame["response"]["headers"]:
             h = header[0].decode('utf-8')
             #print(h)
-            if h == "content-type":
+            if h.lower() == "content-type":
                 responseContentType = header[1].decode("utf-8")
-            if h == "content-encoding":
+            if h.lower() == "content-encoding":
                 responseContentEncoding = header[1].decode("utf-8")
 
         for tfm in self.transformations:
