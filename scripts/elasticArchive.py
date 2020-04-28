@@ -13,16 +13,13 @@ Usage:
         -s elasticArchive.py
         --set elasticsearch_URL=http://<your elasticsearch server>:9200/mitmproxy/_doc 
 
-        --set encodecontent=false
-        OR
-        --set encodecontent=true
-
         OPTIONAL
+        --set storeBinaryContent=true
         --set elastic_username=<username>
         --set elastic_password=<password>
 
-You can also put those --set options inside ~/.mitmproxy/config.yaml but I've never been
-able to get that to work when I run it through docker.
+You can also put those --set options inside ~/.mitmproxy/config.yaml but I prefer setting
+them at startup
 """
 
 from threading import Thread
@@ -32,8 +29,10 @@ import json
 import requests
 
 from mitmproxy import ctx
+from mitmproxy.net.http import encoding
 
 HTTP_WORKERS = 10
+
 
 class elasticArchive:
     """
@@ -43,7 +42,7 @@ class elasticArchive:
     """
     def __init__(self):
         self.transformations = None
-        self.encode = None
+        self.storeBinaryContent = None
         self.url = None
         self.auth = None
         self.queue = Queue()
@@ -88,6 +87,10 @@ class elasticArchive:
             ('request', 'content'),
             ('response', 'content'),
         ),
+        'tls': (
+            ('client_conn', 'tls_extensions'),
+        ),
+
     }
 
     def _init_transformations(self):
@@ -95,6 +98,13 @@ class elasticArchive:
             {
                 'fields': self.fields['headers'],
                 'func': dict,
+            },
+            {
+                'fields': self.fields['tls'],
+                'func': lambda exts: [{
+                    str(ext[0]): str(ext[1]),
+                } for ext in exts],
+
             },
             {
                 'fields': self.fields['timestamp'],
@@ -112,17 +122,11 @@ class elasticArchive:
                 'func': lambda ms: [{
                     'type': m[0],
                     'from_client': m[1],
-                    'content': base64.b64encode(bytes(m[2], 'utf-8')) if self.encode else m[2],
+                    'content': base64.b64encode(bytes(m[2], 'utf-8')) if strutils.is_mostly_bin(m[2]) else m[2],
                     'timestamp': int(m[3] * 1000),
                 } for m in ms],
             }
         ]
-
-        if self.encode:
-            self.transformations.append({
-                'fields': self.fields['content'],
-                'func': base64.b64encode,
-            })
 
     @staticmethod
     def transform_field(obj, path, func):
@@ -161,18 +165,80 @@ class elasticArchive:
         """
         Transform and dump (write / send) a data frame.
         """
+        #print('Frame= %s' % frame)
+        requestContentType = None
+        responseContentType = None
+        requestContentEncoding = None
+        responseContentEncoding = None
+
+        for header in frame["request"]["headers"]:
+            h = header[0].decode('utf-8') 
+            #print(h)
+            if h == "content-type":
+                requestContentType = header[1].decode("utf-8")
+            if h == "content-encoding":
+                requestContentEncoding = header[1].decode("utf-8")
+        for header in frame["response"]["headers"]:
+            h = header[0].decode('utf-8')
+            #print(h)
+            if h == "content-type":
+                responseContentType = header[1].decode("utf-8")
+            if h == "content-encoding":
+                responseContentEncoding = header[1].decode("utf-8")
+
         for tfm in self.transformations:
             for field in tfm['fields']:
                 self.transform_field(frame, field, tfm['func'])
+
+        #print("requestContentType %s" % requestContentType)
+        #print("responseContentType %s" % responseContentType)
+        #print("requestContentEncoding %s" % requestContentEncoding)
+        #print("responseContentEncoding %s" % responseContentEncoding)
+        
+        if responseContentEncoding:
+            rawContent = frame["response"]["content"]
+            #print(type(rawContent))
+            #print("rawContent %s " % rawContent)
+            #print("decoding content of type %s" % responseContentEncoding)
+            #print("decoding with input string of type %s" % type(responseContentEncoding))
+            decodedContent = encoding.decode(rawContent, responseContentEncoding)
+            #print("decodedContent %s" % decodedContent)
+            frame["response"]["content"] = decodedContent
+
+        if self.storeBinaryContent:
+            if self.isBinaryContent(requestContentType):
+                frame["request"]["content"] = base64.b64encode(frame["request"]["content"])
+            if self.isBinaryContent(responseContentType):
+                frame["response"]["content"] = base64.b64encode(frame["response"]["content"])
+        else:
+            if self.isBinaryContent(requestContentType):
+                frame["request"]["content"] = "Binary content removed"
+            if self.isBinaryContent(responseContentType):
+                frame["response"]["content"] = "Binary content removed"
+
         frame = self.convert_to_strings(frame)
 
         print("Sending frame to Elasticsearch")
         # If you need to debug this, print/log frame and result as it will show you 
         # what wasc sent and what errors you got back. This generates a lot of noise though...
 
-        print('Frame= %s' % frame)
+        
         result = requests.post(self.url, json=frame, auth=(self.auth or None))
         print(result.text)
+
+    @staticmethod
+    def isBinaryContent(contentType):
+        if contentType is None:
+            print("Check is None")
+            return False
+        else:
+            print(contentType)
+            if contentType.startswith("text/"):
+                return False
+            elif contentType.startswith("multipart/form-data"):
+                return False
+            else:
+                return True
 
 
     @staticmethod
@@ -180,10 +246,10 @@ class elasticArchive:
         """
         Extra options to be specified in `~/.mitmproxy/config.yaml`.
         """
-        loader.add_option('encodecontent', bool, False,
-                          'Encode content as base64.')
         loader.add_option('elasticsearch_URL', str, 'http://localhost:9200/mitmproxy/_doc',
                           'Elasticsearch resource path including index (mitmproxy) and type (usually _doc) ')
+        loader.add_option('storeBinaryContent', bool, False,
+                          'Store binary content in Elasticsearch. If true, it will get pretty big pretty fast. Text is always stored.')
         loader.add_option('elastic_username', str, '',
                           'Basic auth username for URL destinations.')
         loader.add_option('elastic_password', str, '',
@@ -194,8 +260,9 @@ class elasticArchive:
         Determine the destination type and path, initialize the output
         transformation rules.
         """
-        self.encode = ctx.options.encodecontent
-        print('Encoding set to %s' % self.encode)
+        self.storeBinaryContent = ctx.options.storeBinaryContent
+        print('storeBinaryContent set to %s' % self.storeBinaryContent)
+
         print('Sending all data frames to %s' % ctx.options.elasticsearch_URL)
         if ctx.options.elasticsearch_URL.startswith('http'):
             self.url = ctx.options.elasticsearch_URL
@@ -211,21 +278,25 @@ class elasticArchive:
         self._init_transformations()
 
         for i in range(HTTP_WORKERS):
+            print("Start of create worker loop")
             t = Thread(target=self.worker)
             t.daemon = True
             t.start()
+            print("Started HTTP worker")
 
     def response(self, flow):
         """
         Dump request/response pairs.
         """
         self.queue.put(flow.get_state())
+        print("Put frame on queue (response)")
 
     def error(self, flow):
         """
         Dump errors.
         """
         self.queue.put(flow.get_state())
+
 
     def websocket_end(self, flow):
         """

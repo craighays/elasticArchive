@@ -20,18 +20,20 @@ This app:
 - mounts the local scripts folder to /scripts/ to include the elasticArchive.py addon
 - binds the proxy to port 8080 on the host running it
 - forwards all traffic to $elasticServer as configured in start.sh
-- encodecontent:true converts binary content to base64 to record it in elasticsearch. false... doesn't.
+- storeBinaryContent:true converts binary content to base64 to record it in elasticsearch. false... doesn't.
+  plain text content is always stored in elasticsearch. Binray content like images, video, etc. is all pretty big
+  my preference is to leave storeBinaryContent to false so only log text based content.
 
 If you want, you can create .mitmproxy/config.yaml and add your own settings. I find using the start script
 to work well enough for me.
 
       cat > .mitmproxy/config.yaml <<EOF
       elasticsearch_URL: "http://link.to.your.server:9200/mitmproxy/_doc
-      encodecontent: true
-
-      # Optional Basic auth:
-      elastic_username: "user"
-      elastic_password: "password"
+      
+      # Optional
+      # storeBinaryContent: true
+      # elastic_username: "user"
+      # elastic_password: "password"
       EOF
 
 # Requirements
