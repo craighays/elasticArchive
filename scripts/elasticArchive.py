@@ -223,7 +223,7 @@ class elasticArchive:
         # what wasc sent and what errors you got back. This generates a lot of noise though...
 
         
-        result = requests.post(self.url, json=frame, auth=(self.auth or None))
+        result = requests.post(self.url, json=json.dumps(frame), auth=(self.auth or None))
         print(result.text)
 
     @staticmethod
