@@ -1,0 +1,42 @@
+version: '3.8'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+  mitmproxy:
+    image: craighays/mitmproxy-pythonrequests
+    container_name: mitmproxy
+    ports:
+      - "8008:8080" # Host listens on port 8008 and maps it to port 8080 in the container
+    volumes:
+      - ./scripts:/scripts # Mount the scripts directory
+      - ./mitmproxy:/home/mitmproxy/.mitmproxy # Persistent mitmproxy data
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200/mitmproxy/_doc # Points to the Elasticsearch container
+      - STORE_BINARY_CONTENT=false
+    command: >
+      mitmdump -s /scripts/elasticArchive.py
+      --set elasticsearch_URL=http://elasticsearch:9200/mitmproxy/_doc
+      --set storeBinaryContent=false
+
+volumes:
+  elasticsearch_data:
+    driver: local
