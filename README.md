@@ -44,7 +44,10 @@ to work well enough for me.
 chmod +x start.sh
 
 # Usage
-Edit the start.sh file to point to your server and then run
+```docker-compose up -d```
 
-./start.sh launches a docker container
+This will start all three required docker containers:
+* Elasticsearch:9200:9200, 9300:9300
+* Kibana:5601:5601
+* mitmproxy:8008:8080 (Burp suite usually runs on 8080)
 
